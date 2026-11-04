@@ -1,0 +1,42 @@
+INFO src.data: SPY: downloaded 6993 rows (1999-01-04 to 2026-10-21)
+INFO src.data: XLK: downloaded 6993 rows (1999-01-04 to 2026-10-21)
+INFO src.data: XLF: downloaded 6993 rows (1999-01-04 to 2026-10-21)
+INFO src.data: XLE: downloaded 6993 rows (1999-01-04 to 2026-10-21)
+INFO src.data: XLV: downloaded 6993 rows (1999-01-04 to 2026-10-21)
+INFO src.data: XLY: downloaded 6993 rows (1999-01-04 to 2026-10-21)
+INFO src.data: XLP: downloaded 6993 rows (1999-01-04 to 2026-10-21)
+INFO src.data: XLI: downloaded 6993 rows (1999-01-04 to 2026-10-21)
+INFO src.data: XLU: downloaded 6993 rows (1999-01-04 to 2026-10-21)
+INFO src.data: XLB: downloaded 6993 rows (1999-01-04 to 2026-10-21)
+INFO src.data: ^VIX: downloaded 6995 rows (1999-01-04 to 2026-10-21)
+INFO src.data: SPY: dropping today's bar (2026-10-21), session may be incomplete
+INFO src.data: SPY: kept 6992 of 6993 rows after validation
+INFO src.data: XLK: dropping today's bar (2026-10-21), session may be incomplete
+INFO src.data: XLK: kept 6992 of 6993 rows after validation
+INFO src.data: XLF: dropping today's bar (2026-10-21), session may be incomplete
+INFO src.data: XLF: kept 6992 of 6993 rows after validation
+INFO src.data: XLE: dropping today's bar (2026-10-21), session may be incomplete
+INFO src.data: XLE: kept 6992 of 6993 rows after validation
+INFO src.data: XLV: dropping today's bar (2026-10-21), session may be incomplete
+INFO src.data: XLV: kept 6992 of 6993 rows after validation
+INFO src.data: XLY: dropping today's bar (2026-10-21), session may be incomplete
+INFO src.data: XLY: kept 6992 of 6993 rows after validation
+INFO src.data: XLP: dropping today's bar (2026-10-21), session may be incomplete
+INFO src.data: XLP: kept 6992 of 6993 rows after validation
+INFO src.data: XLI: dropping today's bar (2026-10-21), session may be incomplete
+INFO src.data: XLI: kept 6992 of 6993 rows after validation
+INFO src.data: XLU: dropping today's bar (2026-10-21), session may be incomplete
+INFO src.data: XLU: kept 6992 of 6993 rows after validation
+INFO src.data: XLB: dropping today's bar (2026-10-21), session may be incomplete
+INFO src.data: XLB: kept 6992 of 6993 rows after validation
+INFO src.data: ^VIX: dropping today's bar (2026-10-21), session may be incomplete
+INFO src.data: ^VIX: kept 6994 of 6995 rows after validation
+INFO src.features: XLK: 13 days floored at VAR_FLOOR=1e-06
+INFO src.features: XLF: 7 days floored at VAR_FLOOR=1e-06
+INFO src.features: XLE: 7 days floored at VAR_FLOOR=1e-06
+INFO src.features: XLV: 11 days floored at VAR_FLOOR=1e-06
+INFO src.features: XLY: 16 days floored at VAR_FLOOR=1e-06
+INFO src.features: XLP: 21 days floored at VAR_FLOOR=1e-06
+INFO src.features: XLI: 20 days floored at VAR_FLOOR=1e-06
+INFO src.features: XLU: 16 days floored at VAR_FLOOR=1e-06
+INFO src.features: XLB: 22 days floored at VAR_FLOOR=1e-06

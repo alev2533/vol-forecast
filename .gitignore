@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.DS_Store
+.env
+data/raw/
+results/cache/
+results/forecasts_*
+results/stdout_*
+results/run.log
+results/metrics*

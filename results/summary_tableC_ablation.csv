@@ -1,0 +1,4 @@
+model,1,5,22
+HARX,0.855,0.808,0.906
+LGBM-pooled,0.849,0.825,1.02
+LGBM-pooled-HARXfeat,0.869,0.845,1.021

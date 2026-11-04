@@ -1,0 +1,10 @@
+# Needs Python 3.10 or newer. Tested on Python 3.12 with both older
+# (pandas 2.2, numpy 1.26, arch 7.2) and current versions of everything.
+pandas>=2.0
+numpy>=1.24
+statsmodels>=0.14.5
+scikit-learn>=1.3
+yfinance>=0.2.48
+arch>=7.0
+lightgbm>=4.0
+pytest>=7.0
