@@ -1,11 +1,9 @@
-"""End-to-end run: data -> features -> walk-forward forecasts -> evaluation.
+"""Data -> features -> walk-forward forecasts -> evaluation.
 
-Examples
-    python run.py                         # SPY only, default horizons
-    python run.py --tickers SPY XLF XLE   # a few ETFs
-    python run.py --all --refit 63        # every ETF, quarterly refits (faster)
-    python run.py --all --refit 63 --pool # + one LightGBM trained on all tickers together
-    python run.py --all --refit 63 --pool --pool-only   # skip the slow per-ticker LGBM
+    python run.py                         # SPY only
+    python run.py --tickers SPY XLF XLE
+    python run.py --all --refit 63        # all ETFs, quarterly refits (faster)
+    python run.py --all --refit 63 --pool --pool-only   # pooled LGBM, skip per-ticker LGBM
 """
 import argparse
 import logging
@@ -36,8 +34,8 @@ CACHE = RESULTS / "cache"
 
 
 def cached(path, fresh, fn, log, label):
-    """Generic pickle cache. Works for a single DataFrame (per-ticker models) or a dict
-    of them (lgbm_pooled's {ticker: DataFrame}) — pd.to_pickle/read_pickle handle both."""
+    """Load fn()'s result from a pickle if there is one, otherwise run it and save.
+    Works for a DataFrame or a dict of them (the pooled model returns a dict)."""
     if path.exists() and not fresh:
         log.info("%s loaded from cache", label)
         return pd.read_pickle(path)
@@ -50,13 +48,12 @@ def cached(path, fresh, fn, log, label):
 
 def run_ticker(t, frame, horizons, refit, fresh=False, bench="HAR", pooled_fc=None,
                pool_only=False, ablation_fc=None):
-    """Forecasts are cached per (ticker, model, refit, horizons) so you can iterate on one
-    model without re-running the others. Use --fresh after changing data or features.
-    pooled_fc, if given, is this ticker's forecast from the pooled LightGBM (see main());
-    it is added as an extra model called "LGBM-pooled" alongside everything else.
-    ablation_fc, if given, is added as "LGBM-pooled-HARXfeat" — pooled LightGBM restricted
-    to exactly HARX's inputs, to test whether the pooled LGBM edge is the nonlinearity or
-    the extra features."""
+    """Fit (or load) every model for one ticker, write forecasts_<t>.csv, return metrics.
+
+    Forecasts are cached per (ticker, model, refit, horizons), so changing one model
+    doesn't rerun the rest. Use --fresh after changing data or features.
+    pooled_fc / ablation_fc are this ticker's slices of the pooled runs from main(),
+    added as "LGBM-pooled" and "LGBM-pooled-HARXfeat"."""
     log = logging.getLogger("run")
     args = (frame, horizons, C.OOS_START)
     CACHE.mkdir(parents=True, exist_ok=True)
@@ -72,7 +69,7 @@ def run_ticker(t, frame, horizons, refit, fresh=False, bench="HAR", pooled_fc=No
     ]
     if not pool_only:
         models.append(("LGBM", lambda: M.lgbm(*args, refit)))
-    if t == "SPY":  # VIX is implied vol of the S&P 500: a fair benchmark only for SPY
+    if t == "SPY":  # VIX is S&P 500 implied vol, so it's only a fair benchmark for SPY
         models.append(("VIX", lambda: M.vix_implied(*args)))
     for name, fn in models:
         fc[name] = cached(CACHE / f"{t}_{name}_{tag}.pkl", fresh, fn, log, f"{t} {name}")
@@ -98,16 +95,13 @@ def main():
     ap.add_argument("--refit", type=int, default=C.REFIT_EVERY)
     ap.add_argument("--refresh", action="store_true", help="re-download data")
     ap.add_argument("--fresh", action="store_true", help="ignore cached forecasts")
-    ap.add_argument("--bench", default="HAR", help="model the DM tests compare against, e.g. HARX")
+    ap.add_argument("--bench", default="HAR", help="benchmark for the DM tests, e.g. HARX")
     ap.add_argument("--pool", action="store_true",
-                    help="also fit one LightGBM across all requested tickers together "
-                         "(ticker as a feature), in addition to the per-ticker LGBM")
+                    help="also fit one LightGBM pooled across the tickers")
     ap.add_argument("--pool-only", action="store_true",
-                    help="with --pool, skip the slow per-ticker LGBM entirely")
+                    help="with --pool, skip the per-ticker LGBM (slow)")
     ap.add_argument("--pool-ablation", action="store_true",
-                    help="also fit pooled LightGBM restricted to exactly HARX's inputs "
-                         "(log_v_d, log_v_w, log_v_m, ret_neg, log_vix) — isolates whether "
-                         "pooled LGBM's edge is the nonlinearity or the extra features")
+                    help="also fit pooled LightGBM on HARX's 5 inputs only (ablation)")
     a = ap.parse_args()
     if a.pool_only and not a.pool:
         ap.error("--pool-only requires --pool")
@@ -131,8 +125,6 @@ def main():
             pooled = cached(
                 CACHE / f"{tag}.pkl", a.fresh,
                 lambda: M.lgbm_pooled(frames, a.horizons, C.OOS_START, a.refit), log, tag)
-            # cached() stores a single pickled object; lgbm_pooled returns a dict of
-            # DataFrames (one per ticker), which pickles and unpickles as one object fine.
 
     ablation = {}
     if a.pool_ablation:

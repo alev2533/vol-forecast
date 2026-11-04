@@ -1,9 +1,7 @@
-"""Volatility proxy, forecast targets and model features.
+"""Variance proxy, targets and features.
 
-Timing convention (the whole project depends on this):
-  - Row t holds information known at the CLOSE of day t.
-  - The target at row t is the average daily variance over days t+1 ... t+h.
-  - Nothing on row t may use prices from day t+1 or later, except the target.
+Timing: row t only uses what is known at the close of day t. The target on row t
+is the mean daily variance over t+1..t+h. tests/test_no_lookahead.py checks this.
 """
 import logging
 
@@ -16,12 +14,11 @@ log = logging.getLogger(__name__)
 
 
 def daily_variance(df: pd.DataFrame, ticker: str = "") -> pd.Series:
-    """Daily variance proxy = squared overnight return + Rogers-Satchell intraday range.
+    """Squared overnight return + Rogers-Satchell range.
 
-    Rogers-Satchell is unbiased for Brownian motion with or without drift and uses
-    the full OHLC bar; adding the overnight gap captures close-to-open jumps that a pure
-    intraday range estimator misses. This is a stand-in for 5-minute realized variance,
-    which needs intraday data we do not have for free over this sample.
+    RS is fine with drift and uses the whole OHLC bar, and the overnight term picks up
+    close-to-open gaps that a range estimator can't see. It's a stand-in for 5-min
+    realized variance, which I don't have for free back to 1999.
     """
     o, h, l, c = (np.log(df[k]) for k in ["Open", "High", "Low", "Close"])
     overnight = (o - c.shift(1)) ** 2
@@ -34,17 +31,17 @@ def daily_variance(df: pd.DataFrame, ticker: str = "") -> pd.Series:
 
 
 def forward_mean(v: pd.Series, h: int) -> pd.Series:
-    """Mean of v over t+1 ... t+h, stored at row t (NaN for the last h rows)."""
+    """Mean of v over t+1..t+h, stored at row t (last h rows are NaN)."""
     return v.shift(-1).rolling(h).mean().shift(-(h - 1))
 
 
 def build_frame(df: pd.DataFrame, vix: pd.Series, horizons, ticker: str = "") -> pd.DataFrame:
-    """One row per trading day: proxy, returns, targets for each horizon, features."""
+    """One row per trading day: proxy, returns, y_h targets and x_ features."""
     out = pd.DataFrame(index=df.index)
     out["var"] = daily_variance(df, ticker)
     out["ret"] = np.log(df["Close"]).diff()
 
-    # HAR components: daily, weekly (5d) and monthly (22d) average variance
+    # HAR terms: 1d, 5d, 22d average variance
     out["v_d"] = out["var"]
     out["v_w"] = out["var"].rolling(5).mean()
     out["v_m"] = out["var"].rolling(22).mean()
@@ -52,11 +49,11 @@ def build_frame(df: pd.DataFrame, vix: pd.Series, horizons, ticker: str = "") ->
     for h in horizons:
         out[f"y_{h}"] = forward_mean(out["var"], h)
 
-    # VIX aligned to the ETF calendar; forward-fill at most one missing day
+    # align VIX to the ETF dates, ffill at most 1 missing day
     vix = vix.reindex(out.index).ffill(limit=1)
     out["vix"] = vix
 
-    # ML features (all known at close of t)
+    # features (all known at the close of t)
     f = pd.DataFrame(index=out.index)
     f["log_v_d"] = np.log(out["v_d"])
     f["log_v_w"] = np.log(out["v_w"])

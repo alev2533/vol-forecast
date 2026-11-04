@@ -1,7 +1,7 @@
-"""Step 0: look at the data before trusting any model output.
+"""Look at the data before running any models.
 
-Prints coverage, validation drops (see results/inspect.log), the distribution of the
-variance proxy in annualized-vol units, and how the proxy lines up with VIX.
+Prints coverage, validation drops (also in results/inspect.log), the variance proxy
+in annualized vol terms, and how it compares to VIX.
 """
 import logging
 from pathlib import Path

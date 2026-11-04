@@ -1,5 +1,4 @@
-# Needs Python 3.10 or newer. Tested on Python 3.12 with both older
-# (pandas 2.2, numpy 1.26, arch 7.2) and current versions of everything.
+# Python 3.10+
 pandas>=2.0
 numpy>=1.24
 statsmodels>=0.14.5

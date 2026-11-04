@@ -1,10 +1,10 @@
-"""Forecasting models, all run through the same expanding-window walk-forward.
+"""Forecasting models, all on the same expanding-window walk-forward.
 
-Every function returns a DataFrame indexed by forecast origin (OOS dates only) with
-one column per horizon h: the forecast of mean daily variance over t+1 ... t+h.
+Each one returns a DataFrame indexed by forecast origin (OOS dates only), one column
+per horizon h = forecast of mean daily variance over t+1..t+h.
 
-Leakage rule for training: at origin p, a training row s is usable only if its
-target window ends by p, i.e. s + h <= p. So training rows are iloc[: p - h + 1].
+Training rows at origin p: only rows s with s + h <= p, i.e. iloc[:p - h + 1].
+The targets overlap, so using the last h rows would leak the future.
 """
 import logging
 import warnings
@@ -21,14 +21,14 @@ log = logging.getLogger(__name__)
 
 
 def blocks(index: pd.DatetimeIndex, oos_start, refit_every: int):
-    """Yield (p, q) positional bounds of each refit block of forecast origins."""
+    """(p, q) positional bounds of each refit block of forecast origins."""
     p0 = index.searchsorted(pd.Timestamp(oos_start))
     for p in range(p0, len(index), refit_every):
         yield p, min(p + refit_every, len(index))
 
 
 def train_end(p: int, h: int) -> int:
-    """Exclusive positional end of the training set for origin p, horizon h."""
+    """Exclusive end (position) of the training rows for origin p, horizon h."""
     return p - h + 1
 
 
@@ -37,10 +37,10 @@ def _empty(frame, oos_start, horizons):
     return pd.DataFrame(index=idx, columns=horizons, dtype=float)
 
 
-# ---------------------------------------------------------------- HAR family
+# --- HAR family ---
 def har(frame, horizons, oos_start, refit_every, log_space=False):
-    """HAR-RV (Corsi 2009). log_space=True fits log target on log components and
-    converts back with Duan's smearing factor so the forecast is not biased low."""
+    """HAR-RV (Corsi 2009). With log_space=True it fits in logs and converts back
+    with Duan smearing, since exp of a log forecast is biased low."""
     xcols = ["v_d", "v_w", "v_m"]
     out = _empty(frame, oos_start, horizons)
     for h in horizons:
@@ -70,8 +70,8 @@ HARX_COLS = ["x_log_v_d", "x_log_v_w", "x_log_v_m", "x_ret_neg", "x_log_vix"]
 
 
 def har_x(frame, horizons, oos_start, refit_every, xcols=HARX_COLS):
-    """Log-HAR plus leverage (negative return) and log VIX: a LINEAR model with the
-    key information LightGBM gets. LGBM vs. HAR-X isolates nonlinearity from data."""
+    """Log-HAR + negative return + log VIX. Still linear, but it sees the main
+    information LightGBM gets, so LGBM vs HARX separates nonlinearity from inputs."""
     out = _empty(frame, oos_start, horizons)
     for h in horizons:
         ycol = f"y_{h}"
@@ -87,9 +87,9 @@ def har_x(frame, horizons, oos_start, refit_every, xcols=HARX_COLS):
     return out
 
 
-# ---------------------------------------------------------------- no-fit baselines
+# --- baselines with nothing to fit ---
 def ewma(frame, horizons, oos_start, lam=0.94):
-    """RiskMetrics EWMA on squared close-to-close returns; flat term structure."""
+    """RiskMetrics EWMA on squared close-to-close returns, same forecast for every h."""
     r2 = frame["ret"].fillna(0.0).to_numpy() ** 2
     s2 = np.empty_like(r2)
     s2[0] = r2[1:23].mean()
@@ -103,8 +103,8 @@ def ewma(frame, horizons, oos_start, lam=0.94):
 
 
 def vix_implied(frame, horizons, oos_start):
-    """VIX converted to daily variance. VIX is a 30-calendar-day risk-neutral
-    expectation, so it embeds a variance risk premium and should be biased high."""
+    """VIX as daily variance. It's a 30-day risk-neutral expectation, so it includes
+    the variance risk premium and should come out too high on average."""
     iv = (frame["vix"] / 100) ** 2 / 252
     out = _empty(frame, oos_start, horizons)
     for h in horizons:
@@ -112,12 +112,12 @@ def vix_implied(frame, horizons, oos_start):
     return out
 
 
-# ---------------------------------------------------------------- GARCH family
+# --- GARCH family ---
 def garch(frame, horizons, oos_start, refit_every, asym=False):
-    """GARCH(1,1) or GJR-GARCH(1,1,1) with Student-t errors on close-to-close returns.
+    """GARCH(1,1) or GJR-GARCH(1,1,1), Student-t errors, close-to-close returns.
 
-    Parameters are re-estimated each block on data strictly before the block;
-    within the block, the variance filter updates daily with the fixed parameters.
+    Params are fit on data before each block, then held fixed while the variance
+    filter updates day by day inside the block.
     """
     r = (100 * frame["ret"]).dropna()
     H = max(horizons)
@@ -134,7 +134,7 @@ def garch(frame, horizons, oos_start, refit_every, asym=False):
             if res.convergence_flag != 0:
                 raise RuntimeError(f"convergence flag {res.convergence_flag}")
             prev_params = res.params
-        except Exception as e:  # skip-and-log: reuse last good parameters
+        except Exception as e:  # fit failed: log it and reuse the last good params
             if prev_params is None:
                 log.warning("GARCH block %s failed with no fallback: %s", start.date(), e)
                 continue
@@ -147,9 +147,9 @@ def garch(frame, horizons, oos_start, refit_every, asym=False):
     return out
 
 
-# ---------------------------------------------------------------- gradient boosting
+# --- LightGBM ---
 def lgbm(frame, horizons, oos_start, refit_every, params=None, return_models=False):
-    """LightGBM on log target with the full feature set; Duan smearing back to levels."""
+    """LightGBM on the log target with all x_ features, Duan smearing back to levels."""
     params = params or LGBM_PARAMS
     xcols = feature_cols(frame)
     out = _empty(frame, oos_start, horizons)
@@ -160,8 +160,8 @@ def lgbm(frame, horizons, oos_start, refit_every, params=None, return_models=Fal
             tr = frame.iloc[: train_end(p, h)].dropna(subset=[ycol, "x_log_v_m"])
             X, y = tr[xcols], np.log(tr[ycol])
             m = LGBMRegressor(**params, random_state=0).fit(X, y)
-            # TODO: in-sample residuals of a boosted model are too small, so this
-            # smearing factor is biased toward 1. Estimate it on a held-out tail instead.
+            # TODO: in-sample residuals of a boosted model are too small, so smear is
+            # biased toward 1. Should estimate it on a held-out tail instead.
             smear = np.mean(np.exp(y - m.predict(X)))
             pred = np.exp(m.predict(frame.iloc[p:q][xcols])) * smear
             out.iloc[out.index.get_indexer(frame.index[p:q]), out.columns.get_loc(h)] = pred
@@ -169,24 +169,16 @@ def lgbm(frame, horizons, oos_start, refit_every, params=None, return_models=Fal
     return (out, last_models) if return_models else out
 
 
-# ---------------------------------------------------------------- pooled gradient boosting
 def lgbm_pooled(frames, horizons, oos_start, refit_every, params=None, feature_subset=None):
-    """One LightGBM model trained on ALL tickers at once, ticker as a categorical feature,
-    instead of a separate model per ticker. ~10x the training rows per fit, and the model
-    can learn whether patterns (e.g. the leverage effect) are stronger in some sectors.
+    """One LightGBM fit on all tickers at once (ticker as a categorical feature)
+    instead of one per ticker, so each fit gets ~10x the rows.
 
-    frames: {ticker: frame}, every frame built by features.build_frame on the SAME dates
-    (true for ETFs on a shared trading calendar; the code below trusts that length and
-    index match across tickers and raises if they don't, rather than silently misaligning).
+    frames: {ticker: frame} from build_frame, all on the same dates. Raises if the
+    calendars differ instead of misaligning rows.
+    feature_subset: use only these x_ columns (ticker is always added). Passing
+    HARX_COLS is the ablation: HARX's inputs, pooled data, trees instead of OLS.
 
-    feature_subset: restrict the model to exactly these x_ columns instead of the full
-    feature set (ticker is always added on top). Pass HARX_COLS to run the ablation that
-    isolates nonlinearity from information: same inputs HARX gets, same pooled data, but
-    a tree model instead of a linear one. If pooled LGBM's edge over HARX survives this
-    restriction, the edge is the nonlinearity; if it vanishes, the edge was extra features
-    (VIX, leverage) combined with more data, not the model class itself.
-
-    Returns {ticker: forecast DataFrame}, same shape as calling lgbm() once per ticker.
+    Returns {ticker: forecast DataFrame}, same shape as lgbm() per ticker.
     """
     params = params or LGBM_POOLED_PARAMS
     tickers = list(frames)

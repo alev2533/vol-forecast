@@ -1,7 +1,6 @@
-"""Download, cache and validate daily OHLC data.
+"""Download, cache and validate daily OHLC data (Yahoo Finance).
 
-Validation follows a skip-and-log pattern: rows that fail a check are dropped,
-and every drop is counted and written to the log, so nothing is silently accepted.
+Rows that fail a check get dropped, and the log says how many and why.
 """
 import logging
 from datetime import datetime
@@ -21,8 +20,8 @@ def _cache_path(ticker: str) -> Path:
 
 
 def download(tickers, start, refresh=False) -> dict:
-    """Return {ticker: DataFrame}. Prices are split- and dividend-adjusted
-    (auto_adjust=True), so overnight gaps on ex-dividend days are not fake jumps."""
+    """Returns {ticker: DataFrame}. auto_adjust=True so ex-dividend days don't show
+    up as fake overnight gaps."""
     RAW.mkdir(parents=True, exist_ok=True)
     out = {}
     for t in tickers:
@@ -44,7 +43,7 @@ def download(tickers, start, refresh=False) -> dict:
 
 
 def validate(df: pd.DataFrame, ticker: str, rel_tol: float = 1e-6) -> pd.DataFrame:
-    """Drop rows that fail basic OHLC sanity checks; log what was dropped and why."""
+    """Drop rows that fail basic OHLC checks and log why."""
     n0 = len(df)
     df = df.sort_index()
 
@@ -53,7 +52,7 @@ def validate(df: pd.DataFrame, ticker: str, rel_tol: float = 1e-6) -> pd.DataFra
         log.warning("%s: dropping %d duplicate dates", ticker, dupes.sum())
         df = df[~dupes]
 
-    # A download during market hours includes a partial bar for today.
+    # if downloaded mid-session, the last bar is today's partial bar
     today_ny = datetime.now(ZoneInfo("America/New_York")).date()
     if len(df) and df.index[-1].date() == today_ny:
         log.info("%s: dropping today's bar (%s), session may be incomplete", ticker, today_ny)

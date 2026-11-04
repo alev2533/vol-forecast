@@ -1,12 +1,11 @@
 """Out-of-sample evaluation.
 
-Losses are computed on variance, not volatility. MSE and QLIKE are the two losses
-that stay consistent when the true variance is replaced by a noisy proxy
-(Patton 2011), which is exactly our situation. QLIKE penalizes under-prediction
-more heavily, which matches how a risk or derivatives desk experiences errors.
+Losses are on variance. MSE and QLIKE both rank forecasts correctly when the true
+variance is replaced by a noisy proxy (Patton 2011), which is the situation here.
+QLIKE punishes under-forecasting more.
 
-For h > 1 the targets overlap, so loss differentials are autocorrelated by
-construction: every test uses Newey-West (HAC) standard errors with lags >= h.
+For h > 1 the targets overlap, so loss differentials are autocorrelated. The DM
+tests use Newey-West SEs with lags >= h for that reason.
 """
 import numpy as np
 import pandas as pd
@@ -23,20 +22,20 @@ def qlike(y, f):
 
 
 def _hac_mean_test(d: pd.Series, lags: int):
-    """t-test that mean(d) = 0 with Newey-West SE. This is the Diebold-Mariano test."""
+    """Diebold-Mariano: t-test of mean(d) = 0 with Newey-West SE."""
     res = sm.OLS(d.to_numpy(), np.ones(len(d))).fit(cov_type="HAC", cov_kwds={"maxlags": lags})
     return float(res.tvalues[0]), float(res.pvalues[0])
 
 
 def mincer_zarnowitz(y, f, lags):
-    """y = a + b f + e. A well-calibrated forecast has a = 0, b = 1."""
+    """y = a + b f + e. Well calibrated means a = 0, b = 1."""
     res = sm.OLS(y.to_numpy(), sm.add_constant(f.to_numpy())).fit(
         cov_type="HAC", cov_kwds={"maxlags": lags})
     return float(res.params[1]), float(res.rsquared)
 
 
 def evaluate(frame: pd.DataFrame, forecasts: dict, horizons, bench="HAR") -> pd.DataFrame:
-    """forecasts: {model_name: DataFrame[origin x horizon]}. Returns one row per (h, model)."""
+    """forecasts = {model: DataFrame[origin x horizon]}. One output row per (h, model)."""
     rows = []
     for h in horizons:
         y = frame[f"y_{h}"]

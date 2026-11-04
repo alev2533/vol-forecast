@@ -1,5 +1,5 @@
-"""Run with: python -m pytest -q
-These tests protect the one thing that silently ruins a forecasting project: lookahead."""
+"""Lookahead checks for targets, features and training windows.
+Run with: python -m pytest -q"""
 import numpy as np
 import pandas as pd
 
@@ -32,7 +32,7 @@ def test_features_ignore_the_future():
     base = build_frame(px, vix, [5])
     cut = 200
     px2, vix2 = px.copy(), vix.copy()
-    px2.iloc[cut + 1:] *= 3.0                   # wreck every price after day `cut`
+    px2.iloc[cut + 1:] *= 3.0                   # change every price after `cut`
     vix2.iloc[cut + 1:] *= 3.0
     shocked = build_frame(px2, vix2, [5])
     cols = feature_cols(base) + ["v_d", "v_w", "v_m"]
